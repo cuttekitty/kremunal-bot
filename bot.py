@@ -7,7 +7,6 @@ import a2s
 import telebot
 from telebot import types
 
-# Ваш токен бота
 TOKEN = "8839101658:AAFaD3IVcrFDg3k86zsFgnInvC4R7uCJrak"
 bot = telebot.TeleBot(TOKEN)
 
@@ -75,17 +74,17 @@ def handle_start(message):
     remove_kb = types.ReplyKeyboardRemove()
     text = (
         f"Привіт, {message.from_user.first_name}!\n\n"
-        "Бот моніторингу KREMUNAL працює виключно за командами:\n"
-        "👉 /status — дізнатися онлайн та переглянути список гравців\n"
+        "Бот моніторингу KREMUNAL працює за командами:\n"
+        "👉 /online — дізнатися онлайн та переглянути список гравців\n"
         "👉 /info — інформація для підключення до сервера\n\n"
         "Використовуйте кнопку <b>«Меню»</b> ліворуч від поля вводу."
     )
     bot.send_message(message.chat.id, text, reply_markup=remove_kb, parse_mode="HTML")
 
-@bot.message_handler(commands=['status'])
-def handle_status(message):
+# Обробка команди /online
+@bot.message_handler(commands=['online'])
+def handle_online(message):
     status_text = get_server_status()
-    # Отправляем сообщение без инлайн-кнопок
     bot.send_message(message.chat.id, status_text, parse_mode="HTML")
 
 @bot.message_handler(commands=['info'])
@@ -100,9 +99,10 @@ if __name__ == "__main__":
     t = threading.Thread(target=run_http_server, daemon=True)
     t.start()
 
+    # Оновлюємо перелік команд у кнопці «Меню» в Telegram
     try:
         bot.set_my_commands([
-            types.BotCommand("status", "Онлайн та список гравців"),
+            types.BotCommand("online", "Онлайн та список гравців"),
             types.BotCommand("info", "IP сервера та підключення"),
             types.BotCommand("start", "Головне меню")
         ])
