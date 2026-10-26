@@ -1,4 +1,6 @@
 import html
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import types
 import a2s
@@ -9,13 +11,21 @@ bot = telebot.TeleBot(TOKEN)
 SERVER_IP = "91.211.118.131"
 SERVER_PORT = 27015
 
+# Фейковый веб-сервер, чтобы Render не ругался на отсутствие порта
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive!")
+
+def run_http_server():
+    server = HTTPServer(('0.0.0.0', 10000), SimpleHandler)
+    server.serve_forever()
+
 def get_server_status():
-    """Запрашивает данные о сервере и список игроков"""
     address = (SERVER_IP, SERVER_PORT)
     try:
         info = a2s.info(address, timeout=3.0)
-        
-        # Получаем список игроков
         try:
             players = a2s.players(address, timeout=3.0)
         except Exception:
@@ -29,8 +39,6 @@ def get_server_status():
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>\n\n"
         )
 
-        # Формируем список игроков
-        # Фильтруем пустые имена (бывают при подключении)
         active_players = [p for p in players if p.name and p.name.strip()]
 
         if active_players:
@@ -45,14 +53,12 @@ def get_server_status():
                 text += "😴 <i>На сервере сейчас никого нет.</i>"
 
         return text
-
     except Exception:
         return (
             "🔴 <b>Сервер не отвечает</b> или выключен.\n"
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>"
         )
 
-# Меню по команде /start
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     inline_kb = types.InlineKeyboardMarkup()
@@ -72,7 +78,6 @@ def send_welcome(message):
     )
     bot.send_message(message.chat.id, "Также можете использовать кнопки внизу:", reply_markup=reply_kb)
 
-# Ответ на кнопки под сообщением
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
     bot.answer_callback_query(call.id)
@@ -92,13 +97,11 @@ def callback_handler(call):
         )
         bot.send_message(call.message.chat.id, rules_text, parse_mode="HTML")
 
-# Ответ на кнопку «Мониторинг» на клавиатуре
 @bot.message_handler(func=lambda message: message.text == "📊 Мониторинг")
 def btn_monitoring(message):
     text = get_server_status()
     bot.send_message(message.chat.id, text, parse_mode="HTML")
 
-# Ответ на кнопку «Информация»
 @bot.message_handler(func=lambda message: message.text == "ℹ️ Информация")
 def btn_info(message):
     bot.send_message(
@@ -107,5 +110,8 @@ def btn_info(message):
         parse_mode="HTML"
     )
 
-print("Бот успешно запущен и опрашивает список игроков!")
-bot.infinity_polling()
+if __name__ == "__main__":
+    # Запускаем веб-сервер в фоновом потоке для Render
+    threading.Thread(target=run_http_server, daemon=True).start()
+    print("Бот успешно запущен и опрашивает список игроков!")
+    bot.infinity_polling()
