@@ -7,6 +7,7 @@ import a2s
 import telebot
 from telebot import types
 
+# Вставте сюди ваш актуальний токен бота
 TOKEN = "8839101658:AAFaD3IVcrFDg3k86zsFgnInvC4R7uCJrak"
 bot = telebot.TeleBot(TOKEN)
 
@@ -44,60 +45,58 @@ def get_server_status():
         text = (
             f"🎮 <b>{html.escape(info.server_name)}</b>\n\n"
             f"🟢 <b>Статус:</b> Онлайн\n"
-            f"🗺 <b>Карта:</b> <code>{html.escape(info.map_name)}</code>\n"
-            f"👥 <b>Игроки:</b> {info.player_count}/{info.max_players}\n"
+            f"🗺 <b>Мапа:</b> <code>{html.escape(info.map_name)}</code>\n"
+            f"👥 <b>Гравці:</b> {info.player_count}/{info.max_players}\n"
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>\n\n"
         )
 
         active_players = [p for p in players if p.name and p.name.strip()]
 
         if active_players:
-            text += "📋 <b>Список игроков онлайн:</b>\n"
+            text += "📋 <b>Список гравців онлайн:</b>\n"
             for idx, player in enumerate(active_players, start=1):
                 clean_name = html.escape(player.name)
-                text += f"{idx}. {clean_name} — <i>{player.score} фрагов</i>\n"
+                text += f"{idx}. {clean_name} — <i>{player.score} фрагів</i>\n"
         else:
             if info.player_count > 0:
-                text += "ℹ️ <i>Игроки на сервере, но ники загружаются...</i>"
+                text += "ℹ️ <i>Гравці на сервері, але нікнейми завантажуються...</i>"
             else:
-                text += "😴 <i>На сервере сейчас никого нет.</i>"
+                text += "😴 <i>На сервері зараз нікого немає.</i>"
 
         return text
     except Exception as err:
         return (
-            "🔴 <b>Сервер не отвечает</b> или выключен.\n"
+            "🔴 <b>Сервер не відповідає</b> або вимкнений.\n"
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>"
         )
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
-    print(f"Получена команда /start от {message.from_user.id}", flush=True)
     remove_kb = types.ReplyKeyboardRemove()
     text = (
-        f"Привет, {message.from_user.first_name}!\n\n"
-        "Бот мониторинга KREMUNAL работает по командам:\n"
-        "👉 /status — узнать онлайн и список игроков\n"
-        "👉 /info — подключение к серверу\n\n"
-        "Либо используйте синюю кнопку <b>«Меню»</b> внизу."
+        f"Привіт, {message.from_user.first_name}!\n\n"
+        "Бот моніторингу KREMUNAL працює за командами:\n"
+        "👉 /status — дізнатися онлайн та переглянути список гравців\n"
+        "👉 /info — інформація для підключення до сервера\n\n"
+        "Також ви можете скористатися кнопкою <b>«Меню»</b> ліворуч унизу."
     )
     inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Проверить онлайн", callback_data="refresh_status"))
+    inline_kb.add(types.InlineKeyboardButton("🔄 Перевірити онлайн", callback_data="refresh_status"))
     bot.send_message(message.chat.id, text, reply_markup=remove_kb, parse_mode="HTML")
-    bot.send_message(message.chat.id, "Быстрый опрос:", reply_markup=inline_kb)
+    bot.send_message(message.chat.id, "Швидкий запит:", reply_markup=inline_kb)
 
 @bot.message_handler(commands=['status'])
 def handle_status(message):
-    print(f"Получена команда /status", flush=True)
     status_text = get_server_status()
     inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="refresh_status"))
+    inline_kb.add(types.InlineKeyboardButton("🔄 Оновити", callback_data="refresh_status"))
     bot.send_message(message.chat.id, status_text, reply_markup=inline_kb, parse_mode="HTML")
 
 @bot.message_handler(commands=['info'])
 def handle_info(message):
     text = (
         f"🎮 Сервер <b>KREMUNAL M9SO</b>\n"
-        f"Подключение через консоль:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>"
+        f"Підключення через консоль:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>"
     )
     bot.send_message(message.chat.id, text, parse_mode="HTML")
 
@@ -106,7 +105,7 @@ def handle_callback(call):
     bot.answer_callback_query(call.id)
     status_text = get_server_status()
     inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="refresh_status"))
+    inline_kb.add(types.InlineKeyboardButton("🔄 Оновити", callback_data="refresh_status"))
     try:
         bot.edit_message_text(
             status_text,
@@ -119,21 +118,17 @@ def handle_callback(call):
         bot.send_message(call.message.chat.id, status_text, reply_markup=inline_kb, parse_mode="HTML")
 
 if __name__ == "__main__":
-    print("Инициализация веб-сервера...", flush=True)
     t = threading.Thread(target=run_http_server, daemon=True)
     t.start()
 
-    print("Настройка команд в Telegram...", flush=True)
     try:
         bot.set_my_commands([
-            types.BotCommand("status", "Онлайн и список игроков"),
-            types.BotCommand("info", "IP сервера и подключение"),
-            types.BotCommand("start", "Главное меню")
+            types.BotCommand("status", "Онлайн та список гравців"),
+            types.BotCommand("info", "IP сервера та підключення"),
+            types.BotCommand("start", "Головне меню")
         ])
-    except Exception as e:
-        print(f"Ошибка регистрации команд: {e}", flush=True)
+    except Exception:
+        pass
 
-    print("Сброс вебхука и старт polling...", flush=True)
     bot.remove_webhook()
-    print("Бот успешно запущен и слушает сообщения!", flush=True)
     bot.infinity_polling(timeout=20, long_polling_timeout=10)
