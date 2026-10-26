@@ -7,7 +7,7 @@ import a2s
 import telebot
 from telebot import types
 
-# Вставте сюди ваш актуальний токен бота
+# Ваш токен бота
 TOKEN = "8839101658:AAFaD3IVcrFDg3k86zsFgnInvC4R7uCJrak"
 bot = telebot.TeleBot(TOKEN)
 
@@ -75,22 +75,18 @@ def handle_start(message):
     remove_kb = types.ReplyKeyboardRemove()
     text = (
         f"Привіт, {message.from_user.first_name}!\n\n"
-        "Бот моніторингу KREMUNAL працює за командами:\n"
+        "Бот моніторингу KREMUNAL працює виключно за командами:\n"
         "👉 /status — дізнатися онлайн та переглянути список гравців\n"
         "👉 /info — інформація для підключення до сервера\n\n"
-        "Також ви можете скористатися кнопкою <b>«Меню»</b> ліворуч унизу."
+        "Використовуйте кнопку <b>«Меню»</b> ліворуч від поля вводу."
     )
-    inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Перевірити онлайн", callback_data="refresh_status"))
     bot.send_message(message.chat.id, text, reply_markup=remove_kb, parse_mode="HTML")
-    bot.send_message(message.chat.id, "Швидкий запит:", reply_markup=inline_kb)
 
 @bot.message_handler(commands=['status'])
 def handle_status(message):
     status_text = get_server_status()
-    inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Оновити", callback_data="refresh_status"))
-    bot.send_message(message.chat.id, status_text, reply_markup=inline_kb, parse_mode="HTML")
+    # Отправляем сообщение без инлайн-кнопок
+    bot.send_message(message.chat.id, status_text, parse_mode="HTML")
 
 @bot.message_handler(commands=['info'])
 def handle_info(message):
@@ -99,23 +95,6 @@ def handle_info(message):
         f"Підключення через консоль:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>"
     )
     bot.send_message(message.chat.id, text, parse_mode="HTML")
-
-@bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
-def handle_callback(call):
-    bot.answer_callback_query(call.id)
-    status_text = get_server_status()
-    inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Оновити", callback_data="refresh_status"))
-    try:
-        bot.edit_message_text(
-            status_text,
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            reply_markup=inline_kb,
-            parse_mode="HTML"
-        )
-    except Exception:
-        bot.send_message(call.message.chat.id, status_text, reply_markup=inline_kb, parse_mode="HTML")
 
 if __name__ == "__main__":
     t = threading.Thread(target=run_http_server, daemon=True)
