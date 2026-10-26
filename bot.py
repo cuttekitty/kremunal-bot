@@ -22,12 +22,13 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', 10000), SimpleHandler)
     server.serve_forever()
 
-def get_server_status():
+   def get_server_status():
     address = (SERVER_IP, SERVER_PORT)
     try:
-        info = a2s.info(address, timeout=3.0)
+        # Увеличиваем таймаут до 7 секунд
+        info = a2s.info(address, timeout=7.0)
         try:
-            players = a2s.players(address, timeout=3.0)
+            players = a2s.players(address, timeout=7.0)
         except Exception:
             players = []
 
@@ -41,6 +42,24 @@ def get_server_status():
 
         active_players = [p for p in players if p.name and p.name.strip()]
 
+        if active_players:
+            text += "📋 <b>Список игроков онлайн:</b>\n"
+            for i, p in enumerate(active_players, start=1):
+                clean_name = html.escape(p.name)
+                text += f"{i}. {clean_name} — <i>{p.score} фрагов</i>\n"
+        else:
+            if info.player_count > 0:
+                text += "ℹ️ <i>Игроки на сервере, но ники скрыты или загружаются...</i>"
+            else:
+                text += "😴 <i>На сервере сейчас никого нет.</i>"
+
+        return text
+    except Exception as e:
+        print(f"Ошибка подключения: {e}")
+        return (
+            "🔴 <b>Сервер не отвечает</b> или выключен.\n"
+            f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>"
+        )
         if active_players:
             text += "📋 <b>Список игроков онлайн:</b>\n"
             for i, p in enumerate(active_players, start=1):
