@@ -1,4 +1,3 @@
-import os
 import html
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -17,7 +16,7 @@ class PingHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"OK")
+        self.wfile.write(b"Bot is alive!")
 
     def do_HEAD(self):
         self.send_response(200)
@@ -26,17 +25,17 @@ class PingHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-def run_http_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), PingHandler)
+def start_ping_server():
+    server = HTTPServer(('0.0.0.0', 10000), PingHandler)
     server.serve_forever()
 
 def get_server_status():
     address = (SERVER_IP, SERVER_PORT)
     try:
-        info = a2s.info(address, timeout=5.0)
+        info = a2s.info(address, timeout=6.0)
+        
         try:
-            players = a2s.players(address, timeout=5.0)
+            players = a2s.players(address, timeout=6.0)
         except Exception:
             players = []
 
@@ -63,6 +62,7 @@ def get_server_status():
 
         return text
     except Exception as err:
+        print(f"Ошибка опроса сервера: {err}")
         return (
             "🔴 <b>Сервер не отвечает</b> или выключен.\n"
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>"
@@ -70,16 +70,17 @@ def get_server_status():
 
 @bot.message_handler(commands=['start'])
 def handle_start(message):
+    inline_kb = types.InlineKeyboardMarkup()
+    inline_kb.add(types.InlineKeyboardButton("🔄 Проверить онлайн", callback_data="check_status"))
     remove_kb = types.ReplyKeyboardRemove()
+
     text = (
         f"Привет, {message.from_user.first_name}!\n\n"
-        "Бот мониторинга KREMUNAL работает по командам:\n"
-        "👉 /status — узнать онлайн и список игроков\n"
-        "👉 /info — подключение к серверу\n\n"
-        "Либо используйте синюю кнопку <b>«Меню»</b> внизу."
+        "Бот мониторинга сервера KREMUNAL работает по командам:\n"
+        "👉 /status — онлайн и список игроков\n"
+        "👉 /info — информация для подключения (IP)\n\n"
+        "Также вы можете открывать команды через кнопку <b>Меню</b> слева от ввода сообщения."
     )
-    inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Проверить онлайн", callback_data="refresh_status"))
     bot.send_message(message.chat.id, text, reply_markup=remove_kb, parse_mode="HTML")
     bot.send_message(message.chat.id, "Быстрый опрос:", reply_markup=inline_kb)
 
@@ -87,38 +88,29 @@ def handle_start(message):
 def handle_status(message):
     status_text = get_server_status()
     inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="refresh_status"))
+    inline_kb.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="check_status"))
     bot.send_message(message.chat.id, status_text, reply_markup=inline_kb, parse_mode="HTML")
 
 @bot.message_handler(commands=['info'])
 def handle_info(message):
-    text = (
+    bot.send_message(
+        message.chat.id,
         f"🎮 Сервер <b>KREMUNAL M9SO</b>\n"
-        f"Подключение через консоль:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>"
+        f"Подключение через консоль:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>",
+        parse_mode="HTML"
     )
-    bot.send_message(message.chat.id, text, parse_mode="HTML")
 
-@bot.callback_query_handler(func=lambda call: call.data == "refresh_status")
+@bot.callback_query_handler(func=lambda call: call.data == "check_status")
 def handle_callback(call):
     bot.answer_callback_query(call.id)
     status_text = get_server_status()
-    inline_kb = types.InlineKeyboardMarkup()
-    inline_kb.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="refresh_status"))
-    try:
-        bot.edit_message_text(
-            status_text,
-            chat_id=call.message.chat.id,
-            message_id=call.message.message_id,
-            reply_markup=inline_kb,
-            parse_mode="HTML"
-        )
-    except Exception:
-        bot.send_message(call.message.chat.id, status_text, reply_markup=inline_kb, parse_mode="HTML")
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="check_status"))
+    bot.send_message(call.message.chat.id, status_text, reply_markup=markup, parse_mode="HTML")
 
 if __name__ == "__main__":
-    t = threading.Thread(target=run_http_server)
-    t.daemon = True
-    t.start()
+    threading.Thread(target=start_ping_server, daemon=True).start()
+    print("Бот успешно запущен!")
 
     try:
         bot.set_my_commands([
@@ -126,8 +118,8 @@ if __name__ == "__main__":
             types.BotCommand("info", "IP сервера и подключение"),
             types.BotCommand("start", "Главное меню")
         ])
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Ошибка регистрации команд: {e}")
 
     bot.remove_webhook()
     bot.infinity_polling(timeout=10, long_polling_timeout=5)
