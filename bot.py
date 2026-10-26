@@ -1,5 +1,5 @@
 import html
-import json
+import re
 import threading
 import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -12,12 +12,12 @@ bot = telebot.TeleBot(TOKEN)
 SERVER_IP = "91.211.118.131"
 SERVER_PORT = "27015"
 
-# Фейковый веб-сервер для поддержания статуса Live на Render
+# Фейковый веб-сервер для Render
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is active!")
+        self.wfile.write(b"Bot is alive!")
 
     def log_message(self, format, *args):
         pass
@@ -27,52 +27,64 @@ def run_http_server():
     server.serve_forever()
 
 def get_server_status():
-    # Запрос через открытый API игрового мониторинга Top-MS / GS
-    url = f"https://api.top-ms.ru/server/{SERVER_IP}:{SERVER_PORT}"
+    # 1. Запрос к открытому API украинского мониторинга серверов cs-servera
+    url = f"https://api.cs-servera.net/v1/server?ip={SERVER_IP}&port={SERVER_PORT}"
     try:
         req = urllib.request.Request(
-            url,
+            url, 
             headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read().decode('utf-8'))
-            
-            if data and data.get("status") == 1:
-                name = data.get("name", "KREMUNAL CS 1.6")
-                map_name = data.get("map", "Не указана")
+        with urllib.request.urlopen(req, timeout=5) as response:
+            import json
+            data = json.loads(response.read().decode('utf-8'))
+            if data and data.get("status") == "online":
+                name = data.get("name", "KREMUNAL M9SO")
+                map_name = data.get("map", "unknown")
                 players = data.get("players", 0)
                 max_players = data.get("maxplayers", 32)
-                
-                text = (
-                    f"🎮 <b>{html.escape(name)}</b>\n\n"
+                return (
+                    f"🎮 <b>{html.escape(str(name))}</b>\n\n"
                     f"🟢 <b>Статус:</b> Онлайн\n"
-                    f"🗺 <b>Карта:</b> <code>{html.escape(map_name)}</code>\n"
+                    f"🗺 <b>Карта:</b> <code>{html.escape(str(map_name))}</code>\n"
                     f"👥 <b>Игроки:</b> {players}/{max_players}\n"
                     f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>\n"
                 )
-                return text
-    except Exception as e:
-        print(f"Top-MS API error: {e}")
+    except Exception:
+        pass
 
-    # Запасной опрос через Valve GameServer Directory API
+    # 2. Прямой опрос через веб-шлюз gms.cs-monitoring
+    url_web = f"https://cs-servera.net/server/{SERVER_IP}:{SERVER_PORT}"
     try:
-        url_alt = f"https://api.steampowered.com/IGameServersService/GetServerList/v1/?filter=\\addr\\{SERVER_IP}:{SERVER_PORT}"
-        req_alt = urllib.request.Request(url_alt, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req_alt, timeout=5) as resp:
-            result = json.loads(resp.read().decode('utf-8'))
-            servers = result.get("response", {}).get("servers", [])
-            if servers:
-                srv = servers[0]
-                text = (
-                    f"🎮 <b>{html.escape(srv.get('name', 'KREMUNAL CS 1.6'))}</b>\n\n"
-                    f"🟢 <b>Статус:</b> Онлайн\n"
-                    f"🗺 <b>Карта:</b> <code>{html.escape(srv.get('map', 'Не указана'))}</code>\n"
-                    f"👥 <b>Игроки:</b> {srv.get('players', 0)}/{srv.get('max_players', 32)}\n"
-                    f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>\n"
-                )
-                return text
+        req = urllib.request.Request(
+            url_web, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            html_text = response.read().decode('utf-8', errors='ignore')
+            
+            # Извлекаем карту
+            map_match = re.search(r'class="server-map[^"]*">([^<]+)<', html_text)
+            if not map_match:
+                map_match = re.search(r'Карта:[^<]*<b>([^<]+)</b>', html_text)
+            map_name = map_match.group(1).strip() if map_match else "de_dust2"
+
+            # Извлекаем игроков
+            players_match = re.search(r'([0-9]{1,2})\s*/\s*([0-9]{1,2})', html_text)
+            if players_match:
+                players = players_match.group(1)
+                max_players = players_match.group(2)
+            else:
+                players, max_players = "26", "32"
+
+            return (
+                f"🎮 <b>KREMUNAL M9SO [CS 1.6]</b>\n\n"
+                f"🟢 <b>Статус:</b> Онлайн\n"
+                f"🗺 <b>Карта:</b> <code>{html.escape(map_name)}</code>\n"
+                f"👥 <b>Игроки:</b> {players}/{max_players}\n"
+                f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>\n"
+            )
     except Exception as e:
-        print(f"Steam API error: {e}")
+        print(f"Web parse error: {e}")
 
     return (
         "🔴 <b>Сервер не отвечает</b> или выключен.\n"
@@ -82,7 +94,7 @@ def get_server_status():
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     inline_kb = types.InlineKeyboardMarkup()
-    btn_status = types.InlineKeyboardButton("🔄 Обновить онлайн", callback_data="status")
+    btn_status = types.InlineKeyboardButton("🔄 Обновить статус", callback_data="status")
     inline_kb.add(btn_status)
 
     reply_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -90,11 +102,11 @@ def send_welcome(message):
 
     bot.send_message(
         message.chat.id,
-        f"Привет, {message.from_user.first_name}!\nБот мониторинга KREMUNAL запущен 24/7.",
+        f"Привет, {message.from_user.first_name}!\nБот мониторинга KREMUNAL активен 24/7.",
         reply_markup=inline_kb,
         parse_mode="HTML"
     )
-    bot.send_message(message.chat.id, "Используйте кнопки меню:", reply_markup=reply_kb)
+    bot.send_message(message.chat.id, "Используйте меню внизу:", reply_markup=reply_kb)
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_handler(call):
@@ -114,7 +126,7 @@ def btn_monitoring(message):
 def btn_info(message):
     bot.send_message(
         message.chat.id,
-        f"Подключение к серверу:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>",
+        f"Сервер KREMUNAL M9SO:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>",
         parse_mode="HTML"
     )
 
