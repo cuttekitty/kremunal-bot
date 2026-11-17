@@ -1,11 +1,7 @@
-import os
-import sys
 import html
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import a2s
 import telebot
 from telebot import types
+import a2s
 
 TOKEN = "8839101658:AAFaD3IVcrFDg3k86zsFgnInvC4R7uCJrak"
 bot = telebot.TeleBot(TOKEN)
@@ -13,101 +9,106 @@ bot = telebot.TeleBot(TOKEN)
 SERVER_IP = "91.211.118.131"
 SERVER_PORT = 27015
 
-class PingHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-    def do_HEAD(self):
-        self.send_response(200)
-        self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
-
-def run_http_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), PingHandler)
-    server.serve_forever()
-
 def get_server_status():
+    """Запрашивает данные о сервере и список игроков"""
     address = (SERVER_IP, SERVER_PORT)
     try:
-        info = a2s.info(address, timeout=5.0)
+        info = a2s.info(address, timeout=3.0)
+        
+        # Получаем список игроков
         try:
-            players = a2s.players(address, timeout=5.0)
+            players = a2s.players(address, timeout=3.0)
         except Exception:
             players = []
 
         text = (
             f"🎮 <b>{html.escape(info.server_name)}</b>\n\n"
             f"🟢 <b>Статус:</b> Онлайн\n"
-            f"🗺 <b>Мапа:</b> <code>{html.escape(info.map_name)}</code>\n"
-            f"👥 <b>Гравці:</b> {info.player_count}/{info.max_players}\n"
+            f"🗺 <b>Карта:</b> <code>{html.escape(info.map_name)}</code>\n"
+            f"👥 <b>Игроки:</b> {info.player_count}/{info.max_players}\n"
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>\n\n"
         )
 
+        # Формируем список игроков
+        # Фильтруем пустые имена (бывают при подключении)
         active_players = [p for p in players if p.name and p.name.strip()]
 
         if active_players:
-            text += "📋 <b>Список гравців онлайн:</b>\n"
-            for idx, player in enumerate(active_players, start=1):
-                clean_name = html.escape(player.name)
-                text += f"{idx}. {clean_name} — <i>{player.score} фрагів</i>\n"
+            text += "📋 <b>Список игроков онлайн:</b>\n"
+            for i, p in enumerate(active_players, start=1):
+                clean_name = html.escape(p.name)
+                text += f"{i}. {clean_name} — <i>{p.score} фрагов</i>\n"
         else:
             if info.player_count > 0:
-                text += "ℹ️ <i>Гравці на сервері, але нікнейми завантажуються...</i>"
+                text += "ℹ️ <i>Игроки подключаются или сервер скрывает ники...</i>"
             else:
-                text += "😴 <i>На сервері зараз нікого немає.</i>"
+                text += "😴 <i>На сервере сейчас никого нет.</i>"
 
         return text
-    except Exception as err:
+
+    except Exception:
         return (
-            "🔴 <b>Сервер не відповідає</b> або вимкнений.\n"
+            "🔴 <b>Сервер не отвечает</b> или выключен.\n"
             f"🔌 <b>IP:</b> <code>connect {SERVER_IP}:{SERVER_PORT}</code>"
         )
 
+	# Меню по команде /start
 @bot.message_handler(commands=['start'])
-def handle_start(message):
-    remove_kb = types.ReplyKeyboardRemove()
-    text = (
-        f"Привіт, {message.from_user.first_name}!\n\n"
-        "Бот моніторингу KREMUNAL працює за командами:\n"
-        "👉 /online — дізнатися онлайн та переглянути список гравців\n"
-        "👉 /info — інформація для підключення до сервера\n\n"
-        "Використовуйте кнопку <b>«Меню»</b> ліворуч від поля вводу."
-    )
-    bot.send_message(message.chat.id, text, reply_markup=remove_kb, parse_mode="HTML")
+def send_welcome(message):
+    inline_kb = types.InlineKeyboardMarkup()
+    btn_status = types.InlineKeyboardButton("🔄 Проверить статус и игроков", callback_data="status")
+    btn_rules = types.InlineKeyboardButton("📜 Правила", callback_data="rules")
+    inline_kb.add(btn_status)
+    inline_kb.add(btn_rules)
 
-# Обробка команди /online
+    reply_kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    reply_kb.add("/online", "/info")
+
+    bot.send_message(
+        message.chat.id,
+        f"Привет, {message.from_user.first_name}!\nДобро пожаловать в мониторинг сервера KREMUNAL.",
+        reply_markup=inline_kb,
+        parse_mode="HTML"
+    )
+    bot.send_message(message.chat.id, "Также можете использовать кнопки внизу:", reply_markup=reply_kb)
+
+	# Ответ на кнопки под сообщением
+@bot.callback_query_handler(func=lambda call: True)
+def callback_handler(call):
+    bot.answer_callback_query(call.id)
+
+    if call.data == "status":
+        text = get_server_status()
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("🔄 Обновить", callback_data="status"))
+        bot.send_message(call.message.chat.id, text, reply_markup=markup, parse_mode="HTML")
+
+    elif call.data == "rules":
+        rules_text = (
+            "📜 <b>Правила сервера KREMUNAL:</b>\n"
+            "1. Запрещено использование читов и сторонних скриптов.\n"
+            "2. Запрещены оскорбления и токсичность.\n"
+            "3. Уважайте игроков и администрацию."
+        )
+        bot.send_message(call.message.chat.id, rules_text, parse_mode="HTML")
+
+	# Ответ на кнопку «/online» на клавиатуре
 @bot.message_handler(commands=['online'])
-def handle_online(message):
-    status_text = get_server_status()
-    bot.send_message(message.chat.id, status_text, parse_mode="HTML")
-
-@bot.message_handler(commands=['info'])
-def handle_info(message):
-    text = (
-        f"🎮 Сервер <b>KREMUNAL M9SO</b>\n"
-        f"Підключення через консоль:\n<code>connect {SERVER_IP}:{SERVER_PORT}</code>"
-    )
+def cmd_online(message):
+    try:
+        text = get_server_status()
+    except Exception as e:
+        text = "⚠️ <b>Сервер сейчас не отвечает</b> или выключен, поэтому не удается получить список игроков."
     bot.send_message(message.chat.id, text, parse_mode="HTML")
 
-if __name__ == "__main__":
-    t = threading.Thread(target=run_http_server, daemon=True)
-    t.start()
+	# Ответ на кнопку «/info»
+@bot.message_handler(func=lambda message: message.text == "/info")
+def btn_info(message):
+        bot.send_message(
+        message.chat.id,
+        f"Сервер KREMUNAL\nПодключение: <code>connect {SERVER_IP}:{SERVER_PORT}</code>",
+        parse_mode="HTML"
+    )
 
-    # Оновлюємо перелік команд у кнопці «Меню» в Telegram
-    try:
-        bot.set_my_commands([
-            types.BotCommand("online", "Онлайн та список гравців"),
-            types.BotCommand("info", "IP сервера та підключення"),
-            types.BotCommand("start", "Головне меню")
-        ])
-    except Exception:
-        pass
-
-    bot.remove_webhook()
-    bot.infinity_polling(timeout=20, long_polling_timeout=10)
+print("Бот успешно запущен и опрашивает список игроков!")
+bot.infinity_polling()
